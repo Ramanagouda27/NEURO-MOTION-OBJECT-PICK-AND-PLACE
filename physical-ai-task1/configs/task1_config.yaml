@@ -1,0 +1,88 @@
+# Physical AI Hackathon 2026 - Task 1 Configuration
+# SO101 Pick and Place
+
+robot:
+  name: "SO101"
+  joints: 5          # 5 DOF arm
+  gripper_joints: 2  # Parallel gripper
+  
+  joint_names:
+    - shoulder_pan
+    - shoulder_lift
+    - elbow
+    - wrist_pitch
+    - wrist_roll
+  
+  joint_limits:
+    shoulder_pan:  [-3.14, 3.14]
+    shoulder_lift: [-1.57, 1.57]
+    elbow:         [-2.35, 0.0]
+    wrist_pitch:   [-1.57, 1.57]
+    wrist_roll:    [-3.14, 3.14]
+  
+  gripper:
+    open_width: 0.025
+    close_width: 0.001
+    max_force: 5.0
+
+simulation:
+  timestep: 0.002
+  substeps_per_control: 10
+  gravity: [0, 0, -9.81]
+  renderer: "egl"  # Options: egl, glx, osmesa
+
+task:
+  name: "pick_and_place"
+  
+  object:
+    type: "box"
+    size: [0.02, 0.02, 0.02]
+    mass: 0.05
+    color: [0.9, 0.2, 0.2]
+    initial_position: [0.15, 0.1, 0.39]
+  
+  target:
+    position: [-0.15, -0.1, 0.37]
+    tolerance_xy: 0.015    # 15mm success threshold
+    tolerance_z: 0.05      # 50mm height tolerance
+
+control:
+  ik:
+    method: "jacobian_transpose"
+    max_iterations: 100
+    tolerance: 0.005       # 5mm IK tolerance
+    step_size: 0.5
+    damping: 0.01
+  
+  trajectory:
+    interpolation: "cosine"  # cosine or linear
+    approach_steps: 350
+    grasp_steps: 250
+    lift_steps: 300
+    transport_steps: 400
+    place_steps: 250
+    gripper_close_steps: 250
+    gripper_open_steps: 200
+    settle_steps: 500
+  
+  heights:
+    approach: 0.08         # 8cm above object
+    grasp: 0.025           # 2.5cm above object center
+    lift: 0.12             # 12cm above table
+    place: 0.04            # 4cm above target
+    retreat: 0.10          # 10cm retreat height
+
+detection:
+  camera: "front_cam"
+  resolution: [320, 240]
+  
+  color_threshold:
+    red_min: 150
+    green_max: 100
+    blue_max: 100
+    min_area: 20           # Minimum pixel area for detection
+
+evaluation:
+  success_threshold: 0.015  # 15mm
+  marginal_threshold: 0.030 # 30mm
+  max_time: 30.0            # seconds

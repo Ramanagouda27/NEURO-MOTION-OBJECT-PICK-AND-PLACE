@@ -1,0 +1,26 @@
+{
+    "name": "Physical AI Hackathon - Task 1",
+    "image": "sahillathwal/physical-ai-challange-:latest",
+    "containerEnv": {
+        "DISPLAY": "host.docker.internal:0.0",
+        "MUJOCO_GL": "egl"
+    },
+    "mounts": [
+        "source=D:\\Hackathon\\physical-ai-challange-2026,target=/workspace,type=bind"
+    ],
+    "workspaceFolder": "/task1",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-toolsai.jupyter"
+            ],
+            "settings": {
+                "python.defaultInterpreterPath": "/usr/bin/python3",
+                "editor.formatOnSave": true
+            }
+        }
+    },
+    "postCreateCommand": "pip install mujoco gymnasium opencv-python-headless numpy --break-system-packages 2>/dev/null || true"
+}

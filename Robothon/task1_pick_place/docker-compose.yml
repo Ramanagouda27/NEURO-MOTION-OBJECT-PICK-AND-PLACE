@@ -1,0 +1,75 @@
+# ============================================================
+#  Task 1 – Object Pick and Place
+#  Physical AI Hackathon 2026
+#
+#  Usage:
+#    docker-compose up sim          # run simulation → saves video
+#    docker-compose up collect      # collect 50 demos
+#    docker-compose up train        # train ACT policy
+#    docker-compose up eval         # evaluate trained policy
+# ============================================================
+
+version: "3.8"
+
+x-base: &base
+  image: sahillathwal/physical-ai-challange-2026:latest
+  volumes:
+    # Mount our scripts into the container (live edit — no rebuild needed)
+    - ./:/task1
+    # Mount output folder so videos/checkpoints appear on Windows
+    - ./output:/output
+  working_dir: /task1
+  environment:
+    - MUJOCO_GL=osmesa          # software OpenGL — works without GPU
+    - PYTHONPATH=/usr/local/lib/python3.10/dist-packages
+    - PYTHONUNBUFFERED=1
+
+services:
+
+  # ── 1. Scripted simulation (headless, saves video) ──────────────────────
+  sim:
+    <<: *base
+    command: >
+      python3 pick_place_sim.py
+        --headless
+        --num_trials 3
+        --record /output/task1_demo.mp4
+    profiles: ["sim", "default"]
+
+  # ── 2. Collect demonstration episodes ───────────────────────────────────
+  collect:
+    <<: *base
+    command: >
+      python3 collect_demos.py
+        --num_demos 50
+        --output_dir /task1/demo_data
+        --headless
+    profiles: ["collect"]
+
+  # ── 3. Train ACT policy ──────────────────────────────────────────────────
+  train:
+    <<: *base
+    command: >
+      python3 train_act_policy.py
+        --mode standalone
+        --data_dir /task1/demo_data
+        --checkpoint_dir /task1/checkpoints
+        --epochs 200
+        --batch_size 64
+    profiles: ["train"]
+
+  # ── 4. Evaluate trained policy ───────────────────────────────────────────
+  eval:
+    <<: *base
+    command: >
+      python3 train_act_policy.py
+        --mode eval
+        --checkpoint /task1/checkpoints/best.pt
+        --eval_episodes 5
+    profiles: ["eval"]
+
+  # ── 5. Smoke test (env check, <30 sec) ───────────────────────────────────
+  smoke:
+    <<: *base
+    command: python3 lerobot_env.py
+    profiles: ["smoke"]
