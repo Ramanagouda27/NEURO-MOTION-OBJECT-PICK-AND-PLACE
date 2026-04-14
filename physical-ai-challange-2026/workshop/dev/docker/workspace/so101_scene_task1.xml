@@ -1,0 +1,237 @@
+<mujoco model="so101_task1">
+  <!--
+    SO101 Robot — Task 1: Autonomous Object Pick and Place
+    Physical AI Hackathon 2026
+
+    Based on the reference SO101 model with:
+      - Overhead camera for autonomous perception
+      - Blue cylinder as fixed target marker
+      - Red cube as free body (randomised at runtime)
+
+    Joint names match real SO101 URDF:
+      shoulder_pan  | -1.91986 to  1.91986 rad
+      shoulder_lift | -1.74533 to  1.74533 rad
+      elbow_flex    | -1.69    to  1.69    rad
+      wrist_flex    | -1.65806 to  1.65806 rad
+      wrist_roll    | -2.74385 to  2.84121 rad
+      gripper       | -0.17453 to  1.74533 rad  (single revolute jaw)
+                       open ≈ 1.4 rad,  closed ≈ 0.05 rad
+  -->
+
+  <compiler angle="radian" autolimits="true"/>
+
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="RK4">
+    <flag contact="enable" frictionloss="enable"/>
+  </option>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0.1 0.1 0.1"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="120" elevation="-20"/>
+  </visual>
+
+  <asset>
+    <material name="table_mat"   rgba="0.82 0.71 0.55 1"/>
+    <material name="base_mat"    rgba="0.15 0.15 0.15 1" shininess="0.6"/>
+    <material name="link_mat"    rgba="1.0 0.84 0.0 1" shininess="0.5"/>
+    <material name="joint_mat"   rgba="0.15 0.30 0.90 1" shininess="0.5"/>
+    <material name="gripper_mat" rgba="0.20 0.20 0.20 1"/>
+    <material name="object_mat"  rgba="0.85 0.15 0.15 1" shininess="0.5"/>
+    <material name="blue_mat"    rgba="0.15 0.30 0.90 1" shininess="0.5"/>
+    <material name="floor_mat"   rgba="0.55 0.55 0.55 1"/>
+  </asset>
+
+  <default>
+    <joint damping="0.8" armature="0.02" frictionloss="0.02"/>
+    <geom contype="1" conaffinity="1" condim="4" friction="1.2 0.005 0.0001"/>
+    <position kp="120" kv="12"/>
+  </default>
+
+  <worldbody>
+
+    <!-- Floor -->
+    <geom name="floor" type="plane" size="2 2 0.1"
+          material="floor_mat" contype="1" conaffinity="1"/>
+
+    <!-- Table — top surface at z = 0.40 -->
+    <body name="table" pos="0 0 0.38">
+      <geom type="box" size="0.55 0.40 0.02" pos="0 0 0"      material="table_mat"/>
+      <geom type="box" size="0.02 0.02 0.38" pos=" 0.50  0.35 -0.38" material="table_mat"/>
+      <geom type="box" size="0.02 0.02 0.38" pos="-0.50  0.35 -0.38" material="table_mat"/>
+      <geom type="box" size="0.02 0.02 0.38" pos=" 0.50 -0.35 -0.38" material="table_mat"/>
+      <geom type="box" size="0.02 0.02 0.38" pos="-0.50 -0.35 -0.38" material="table_mat"/>
+    </body>
+
+    <!-- ============================================================
+         SO101 Robot — primitive geometry, real joint names & limits
+         Robot base sits on the table surface at z = 0.40
+         ============================================================ -->
+    <body name="base_link" pos="0 0 0.40">
+      <geom name="base_geom" type="cylinder" size="0.045 0.035"
+            material="base_mat" contype="1" conaffinity="0"/>
+      <inertial pos="0 0 0" mass="0.6" diaginertia="0.002 0.002 0.002"/>
+
+      <!-- Joint 1: shoulder_pan — Z axis (yaw) -->
+      <joint name="shoulder_pan" type="hinge" axis="0 0 1"
+             range="-1.91986 1.91986" pos="0 0 0"/>
+
+      <body name="shoulder_link" pos="0 0 0.055">
+        <geom name="shoulder_geom" type="capsule" size="0.028"
+              fromto="0 0 -0.03 0 0 0.03" material="joint_mat" contype="1" conaffinity="0"/>
+        <inertial pos="0 0 0" mass="0.35" diaginertia="0.001 0.001 0.001"/>
+
+        <!-- Joint 2: shoulder_lift — Y axis (pitch) -->
+        <joint name="shoulder_lift" type="hinge" axis="0 1 0"
+               range="-1.74533 1.74533" pos="0 0 0"/>
+
+        <body name="upper_arm_link" pos="0 0 0.035">
+          <geom name="upper_arm_geom" type="capsule" size="0.022"
+                fromto="0 0 0 0 0 0.14" material="link_mat" contype="1" conaffinity="0"/>
+          <inertial pos="0 0 0.07" mass="0.28" diaginertia="0.0006 0.0006 0.00005"/>
+
+          <!-- Joint 3: elbow_flex — Y axis (pitch) -->
+          <joint name="elbow_flex" type="hinge" axis="0 1 0"
+                 range="-1.69 1.69" pos="0 0 0.14"/>
+
+          <body name="lower_arm_link" pos="0 0 0.14">
+            <geom name="lower_arm_geom" type="capsule" size="0.019"
+                  fromto="0 0 0 0 0 0.12" material="link_mat" contype="1" conaffinity="0"/>
+            <inertial pos="0 0 0.06" mass="0.22" diaginertia="0.0004 0.0004 0.00004"/>
+
+            <!-- Joint 4: wrist_flex — Y axis (pitch) -->
+            <joint name="wrist_flex" type="hinge" axis="0 1 0"
+                   range="-1.65806 1.65806" pos="0 0 0.12"/>
+
+            <body name="wrist_link" pos="0 0 0.12">
+              <geom name="wrist_geom" type="capsule" size="0.018"
+                    fromto="0 0 0 0 0 0.05" material="joint_mat" contype="1" conaffinity="0"/>
+              <inertial pos="0 0 0.025" mass="0.12" diaginertia="0.0002 0.0002 0.00003"/>
+
+              <!-- Joint 5: wrist_roll — X axis (roll) -->
+              <joint name="wrist_roll" type="hinge" axis="1 0 0"
+                     range="-2.74385 2.84121" pos="0 0 0"/>
+
+              <body name="gripper_link" pos="0 0 0.05">
+                <!-- Gripper palm -->
+                <geom name="gripper_palm" type="box" size="0.028 0.022 0.018"
+                      pos="0 0 0.018" material="gripper_mat" contype="1" conaffinity="0"/>
+                <!-- Fixed lower jaw -->
+                <geom name="fixed_jaw" type="box" size="0.008 0.008 0.025"
+                      pos="0 -0.014 0.052" material="gripper_mat"
+                      contype="1" conaffinity="1" friction="2.0 0.01 0.002"/>
+                <inertial pos="0 0 0.02" mass="0.09" diaginertia="0.0001 0.0001 0.00008"/>
+
+                <!-- EE tracking site — centred between the two jaws -->
+                <site name="ee_site" pos="0 0 0.062" size="0.006" rgba="1 1 0 1"/>
+
+                <!-- Joint 6: gripper — single revolute jaw
+                     open  ≈ 1.4 rad  (jaw swings open)
+                     closed ≈ 0.05 rad (jaw clamped on object) -->
+                <joint name="gripper" type="hinge" axis="0 1 0"
+                       range="-0.17453 1.74533" pos="0 0.014 0.036"/>
+
+                <!-- Moving jaw -->
+                <body name="moving_jaw_link" pos="0 0.014 0.036">
+                  <geom name="moving_jaw" type="box" size="0.008 0.008 0.025"
+                        pos="0 0 0.016" material="gripper_mat"
+                        contype="1" conaffinity="1" friction="2.0 0.01 0.002"/>
+                  <inertial pos="0 0 0.016" mass="0.025"
+                            diaginertia="0.00002 0.00002 0.000005"/>
+                </body>
+
+              </body> <!-- gripper_link -->
+            </body> <!-- wrist_link -->
+          </body> <!-- lower_arm_link -->
+        </body> <!-- upper_arm_link -->
+      </body> <!-- shoulder_link -->
+    </body> <!-- base_link -->
+
+    <!-- ============================================================
+         Red cube — object to pick up
+         Freejoint allows runtime randomisation of XY position.
+         Default centre at z = 0.432 (resting on table at z = 0.40).
+         ============================================================ -->
+    <body name="object" pos="0.20 0.0 0.432">
+      <freejoint name="object_freejoint"/>
+      <geom name="object_geom" type="box" size="0.026 0.026 0.026"
+            material="object_mat" mass="0.06"
+            friction="1.8 0.01 0.001" contype="1" conaffinity="1" condim="4"/>
+      <inertial pos="0 0 0" mass="0.06" diaginertia="0.00003 0.00003 0.00003"/>
+      <site name="object_site" pos="0 0 0" size="0.005" rgba="1 0 0 1"/>
+    </body>
+
+    <!-- ============================================================
+         Blue cylinder — fixed target marker
+         Robot places the red cube near this cylinder.
+         Centre at z = 0.426 (resting on table surface at z = 0.40,
+         half-height = 0.026 → bottom at 0.400).
+         Position: x = 0.0, y = 0.25 (to the left of the robot,
+         easily reachable via shoulder_pan ≈ 90°).
+         ============================================================ -->
+    <body name="blue_target" pos="0.0 0.25 0.426">
+      <geom name="blue_cyl_geom" type="cylinder" size="0.020 0.026"
+            material="blue_mat"
+            contype="1" conaffinity="1" friction="0.8 0.005 0.0001"/>
+      <inertial pos="0 0 0" mass="1.0" diaginertia="0.001 0.001 0.001"/>
+    </body>
+
+    <!-- ============================================================
+         Overhead camera — fixed at z = 1.30, looking straight down
+         Field of view 60° → covers ±0.50 m at object height (z≈0.43)
+         Used for autonomous segmentation-based object detection.
+         ============================================================ -->
+    <body name="cam_overhead" pos="0.15 0.0 1.30">
+      <camera name="overhead" fovy="60"/>
+    </body>
+
+  </worldbody>
+
+  <!-- ============================================================
+       Equality constraints
+       gripper_object_weld: activated at runtime after jaw closes
+       to attach the cube to the gripper_link.  Deactivated at release.
+       The relpose is set dynamically in Python before activation.
+       ============================================================ -->
+  <equality>
+    <weld name="gripper_object_weld"
+          body1="gripper_link" body2="object"
+          active="false"
+          solref="0.01 1" solimp="0.99 0.99 0.001 0.5 2"/>
+  </equality>
+
+  <!-- ============================================================
+       Actuators — position controlled, indices 0..5
+       0: shoulder_pan   1: shoulder_lift  2: elbow_flex
+       3: wrist_flex     4: wrist_roll     5: gripper
+       ============================================================ -->
+  <actuator>
+    <position name="act_shoulder_pan"  joint="shoulder_pan"
+              kp="160" kv="16" ctrlrange="-1.91986 1.91986"
+              forcelimited="true" forcerange="-25 25"/>
+    <position name="act_shoulder_lift" joint="shoulder_lift"
+              kp="160" kv="16" ctrlrange="-1.74533 1.74533"
+              forcelimited="true" forcerange="-25 25"/>
+    <position name="act_elbow_flex"    joint="elbow_flex"
+              kp="120" kv="12" ctrlrange="-1.69 1.69"
+              forcelimited="true" forcerange="-20 20"/>
+    <position name="act_wrist_flex"    joint="wrist_flex"
+              kp="90"  kv="9"  ctrlrange="-1.65806 1.65806"
+              forcelimited="true" forcerange="-12 12"/>
+    <position name="act_wrist_roll"    joint="wrist_roll"
+              kp="70"  kv="7"  ctrlrange="-2.74385 2.84121"
+              forcelimited="true" forcerange="-10 10"/>
+    <position name="act_gripper"       joint="gripper"
+              kp="200" kv="20" ctrlrange="-0.17453 1.74533"
+              forcelimited="true" forcerange="-8 8"/>
+  </actuator>
+
+  <sensor>
+    <jointpos name="q_shoulder_pan"  joint="shoulder_pan"/>
+    <jointpos name="q_shoulder_lift" joint="shoulder_lift"/>
+    <jointpos name="q_elbow_flex"    joint="elbow_flex"/>
+    <jointpos name="q_wrist_flex"    joint="wrist_flex"/>
+    <jointpos name="q_wrist_roll"    joint="wrist_roll"/>
+    <jointpos name="q_gripper"       joint="gripper"/>
+  </sensor>
+
+</mujoco>
