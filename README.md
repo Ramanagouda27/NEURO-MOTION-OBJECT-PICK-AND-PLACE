@@ -46,61 +46,36 @@ NEURO-MOTION-OBJECT-PICK-AND-PLACE/
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Windows 10/11 (for Docker Desktop)
-- Docker Desktop
-- VcXsrv (for GUI display) or WSL2 with X11 support
-- Python 3.10+
+- **Docker Desktop** (with WSL2 + NVIDIA Container Toolkit for GPU passthrough)
+- **VcXsrv / XLaunch** for X11 forwarding to Windows
 
-### Option 1: MuJoCo Simulation (Recommended for Quick Testing)
+### Three steps to run
 
+**Step 1: Clone the repository**
 ```bash
-# Clone and enter the project
-cd physical-ai-task1
-
-# Install dependencies
-pip install mujoco gymnasium opencv-python numpy torch torchvision
-
-# Run the simulation
-python scripts/task1_pick_and_place.py --render
-
-# Or run headless with video output
-python scripts/task1_pick_and_place.py --record --output video_output.mp4
+git clone https://github.com/Ramanagouda27/NEURO-MOTION-OBJECT-PICK-AND-PLACE.git
+cd NEURO-MOTION-OBJECT-PICK-AND-PLACE/physical-ai-challange-2026/workshop/dev/docker/workspace
 ```
 
-### Option 2: Docker-based Complete Environment
+**Step 2: Pull the instructor's Docker image**
+```bash
+docker pull sahillathwal/physical-ai-challange-2026:latest
+```
 
+**Step 3: Start XLaunch**
+
+Launch XLaunch with these settings (then leave it running in the system tray):
+- Multiple windows
+- Start no client
+- ☑ Disable access control
+- ☑ Native opengl
+
+**Step 4: Run the simulation**
 ```powershell
-# Set up VcXsrv X Server
-# 1. Launch XLaunch (VcXsrv)
-# 2. Select "Multiple windows" → "Start no client"
-# 3. CHECK "Disable access control" → Finish
-
-# Run Docker container
-docker run -it --rm ^
-  -e DISPLAY=host.docker.internal:0.0 ^
-  -v D:\Hackathon\physical-ai-challange-2026:/workspace ^
-  --name physical-ai ^
-  sahillathwal/physical-ai-challange-:latest ^
-  /bin/bash
-
-# Inside container - run simulation
-cd /workspace/physical-ai-task1
-python scripts/task1_pick_and_place.py --render
+.\run_task1.bat
 ```
 
-### Option 3: Full ROS 2 Stack (Advanced)
-
-```bash
-# Build ROS 2 workspace
-cd physical-ai-challange-2026/workshop/dev/docker/workspace
-colcon build
-
-# Source the setup
-source install/setup.bash
-
-# Launch the complete system
-ros2 launch so101_unified_bringup main.launch.py
-```
+A native MuJoCo window opens showing the robot executing the full pick-and-place sequence autonomously. When finished, `task1_phase_log.csv` is written with per-phase end-effector and object positions.
 
 ## 📦 Dependencies
 
