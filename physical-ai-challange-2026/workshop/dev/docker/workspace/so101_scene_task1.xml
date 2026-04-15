@@ -31,14 +31,24 @@
   </visual>
 
   <asset>
-    <material name="table_mat"   rgba="0.82 0.71 0.55 1"/>
+    <!-- Procedural checkerboard textures for table + floor (no external files) -->
+    <texture name="floor_tex" type="2d" builtin="checker"
+             rgb1="0.35 0.35 0.40" rgb2="0.55 0.55 0.60"
+             width="512" height="512" mark="edge" markrgb="0.1 0.1 0.1"/>
+    <texture name="table_tex" type="2d" builtin="checker"
+             rgb1="0.85 0.78 0.62" rgb2="0.65 0.55 0.40"
+             width="512" height="512" mark="edge" markrgb="0.2 0.15 0.1"/>
+
+    <material name="floor_mat"   texture="floor_tex" texrepeat="8 8"
+              specular="0.1" shininess="0.1" reflectance="0.05"/>
+    <material name="table_mat"   texture="table_tex" texrepeat="4 3"
+              specular="0.2" shininess="0.3"/>
     <material name="base_mat"    rgba="0.15 0.15 0.15 1" shininess="0.6"/>
     <material name="link_mat"    rgba="1.0 0.84 0.0 1" shininess="0.5"/>
     <material name="joint_mat"   rgba="0.15 0.30 0.90 1" shininess="0.5"/>
     <material name="gripper_mat" rgba="0.20 0.20 0.20 1"/>
     <material name="object_mat"  rgba="0.85 0.15 0.15 1" shininess="0.5"/>
     <material name="blue_mat"    rgba="0.15 0.30 0.90 1" shininess="0.5"/>
-    <material name="floor_mat"   rgba="0.55 0.55 0.55 1"/>
   </asset>
 
   <default>
@@ -193,10 +203,13 @@
        The relpose is set dynamically in Python before activation.
        ============================================================ -->
   <equality>
+    <!-- Stiff weld: resolves in ~1 timestep, no soft spring, no slingshot.
+         solref  = "-stiffness -damping"  (negative → direct stiffness mode)
+         solimp  = near-1 impedance so the constraint is enforced exactly. -->
     <weld name="gripper_object_weld"
           body1="gripper_link" body2="object"
           active="false"
-          solref="0.01 1" solimp="0.99 0.99 0.001 0.5 2"/>
+          solref="-10000 -400" solimp="0.999 0.9999 1e-6 0.5 2"/>
   </equality>
 
   <!-- ============================================================

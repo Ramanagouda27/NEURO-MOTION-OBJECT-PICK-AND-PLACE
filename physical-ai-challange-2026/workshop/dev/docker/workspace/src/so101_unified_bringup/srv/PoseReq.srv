@@ -1,5 +1,0 @@
-geometry_msgs/Pose object_pose
-bool constraint
-string type
----
-bool success

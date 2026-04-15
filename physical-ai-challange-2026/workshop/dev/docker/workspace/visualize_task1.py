@@ -18,13 +18,17 @@ Scene: /home/hacker/workspace/so101_scene_task1.xml
   - overhead camera (fovy=60, z=1.30)
 """
 
+import os
+import csv
 import time
 import numpy as np
 import mujoco
 import mujoco.viewer
 
-# ── Scene & model ──────────────────────────────────────────────────────────────
-MODEL_PATH = '/home/hacker/workspace/so101_scene_task1.xml'
+# ── Scene & model (cross-platform, relative to this script) ────────────────────
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH  = os.path.join(_SCRIPT_DIR, 'so101_scene_task1.xml')
+LOG_CSV_PATH = os.path.join(_SCRIPT_DIR, 'task1_phase_log.csv')
 
 # ── Joint / actuator names (order matches real SO101 URDF) ────────────────────
 JOINT_NAMES = ['shoulder_pan', 'shoulder_lift', 'elbow_flex',
@@ -420,6 +424,19 @@ def main():
             ee_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, 'ee_site')
             return data.site_xpos[ee_id].copy()
 
+        # ── CSV phase logger ──────────────────────────────────────────────────
+        csv_file = open(LOG_CSV_PATH, 'w', newline='')
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow([
+            'phase', 't_sim',
+            'ee_x', 'ee_y', 'ee_z',
+            'obj_x', 'obj_y', 'obj_z',
+            'tgt_x', 'tgt_y', 'tgt_z',
+            'weld_active',
+        ])
+        csv_file.flush()
+        print(f"  [LOG] writing phase log → {LOG_CSV_PATH}")
+
         def do_phase(label, target, dur, pause_s):
             nonlocal current
             print(f"  >> {label}")
@@ -428,21 +445,66 @@ def main():
             mujoco.mj_forward(model, data)
             ee_pos = get_ee_pos()
             obj_pos = data.xpos[obj_body_id].copy()
+            csv_writer.writerow([
+                label, f"{data.time:.4f}",
+                f"{ee_pos[0]:.4f}",  f"{ee_pos[1]:.4f}",  f"{ee_pos[2]:.4f}",
+                f"{obj_pos[0]:.4f}", f"{obj_pos[1]:.4f}", f"{obj_pos[2]:.4f}",
+                f"{cyl_xyz[0]:.4f}", f"{cyl_xyz[1]:.4f}", f"{cyl_xyz[2]:.4f}",
+                int(data.eq_active[eq_id]),
+            ])
+            csv_file.flush()
             print(f"     EE: ({ee_pos[0]:.3f}, {ee_pos[1]:.3f}, {ee_pos[2]:.3f})  "
                   f"Obj: ({obj_pos[0]:.3f}, {obj_pos[1]:.3f}, {obj_pos[2]:.3f})")
 
         def activate_weld():
-            """Snap the weld relpose to the current object↔gripper offset."""
+            """
+            Lock the cube to the gripper WITHOUT teleport / slingshot.
+
+            Steps:
+              1. Snap cube position to the EE site (centred between jaws) and
+                 match its orientation to the gripper — so the weld's target
+                 offset equals the actual offset (zero violation at t=0).
+              2. Zero all 6 DoF of the free-joint so no residual momentum
+                 kicks the cube out.
+              3. Write the weld relpose using the CORRECT MuJoCo 3.x layout:
+                     eq_data[0:3]  = anchor        (body2 frame) → zero
+                     eq_data[3:6]  = relpose_pos   (body1 origin in body2)
+                     eq_data[6:10] = relpose_quat  (body1 orient in body2)
+                     eq_data[10]   = torquescale
+              4. Activate the equality constraint.
+            """
             mujoco.mj_forward(model, data)
+
+            # (1) Snap cube into canonical grip pose (at EE site)
+            ee_sid   = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, 'ee_site')
+            ee_pos   = data.site_xpos[ee_sid].copy()
+            gri_quat = data.xquat[gripper_body_id].copy()
+            data.qpos[fj_adr    : fj_adr + 3] = ee_pos
+            data.qpos[fj_adr + 3: fj_adr + 7] = gri_quat
+
+            # (2) Zero free-joint velocities (lin + ang) to kill momentum
+            obj_dofadr = int(model.jnt_dofadr[fj_id])
+            data.qvel[obj_dofadr: obj_dofadr + 6] = 0.0
+
+            mujoco.mj_forward(model, data)
+
+            # (3) Compute body1(gripper)↔body2(object) relative pose
             gri_mat  = data.xmat[gripper_body_id].reshape(3, 3)
             gri_pos  = data.xpos[gripper_body_id].copy()
             obj_pos  = data.xpos[obj_body_id].copy()
-            obj_quat = data.xquat[obj_body_id].copy()   # w,x,y,z
-            gri_quat = data.xquat[gripper_body_id].copy()
-            rel_pos  = gri_mat.T @ (obj_pos - gri_pos)
-            rel_quat = qmul(qinv(gri_quat), obj_quat)
-            model.eq_data[eq_id, 0:3] = rel_pos
-            model.eq_data[eq_id, 3:7] = rel_quat
+            obj_quat = data.xquat[obj_body_id].copy()
+
+            # gripper pose expressed in object frame (body2 = object)
+            obj_mat  = data.xmat[obj_body_id].reshape(3, 3)
+            rel_pos  = obj_mat.T @ (gri_pos - obj_pos)
+            rel_quat = qmul(qinv(obj_quat), gri_quat)
+
+            model.eq_data[eq_id, 0:3]  = 0.0          # anchor at body2 origin
+            model.eq_data[eq_id, 3:6]  = rel_pos      # body1 pos in body2 frame
+            model.eq_data[eq_id, 6:10] = rel_quat     # body1 quat in body2 frame
+            if model.eq_data.shape[1] > 10:
+                model.eq_data[eq_id, 10] = 1.0        # torquescale
+
             data.eq_active[eq_id] = 1
             mujoco.mj_forward(model, data)
             print(f"  >> [GRIP LOCKED]  rel_pos={rel_pos.round(4)}")
@@ -466,12 +528,12 @@ def main():
         # Phase 5 – lift
         do_phase("LIFT",             lift_pose,    3.0, 0.5)
         # Phase 6 – transport over target (SLOW — gives weld time to stabilize)
-        do_phase("TRANSPORT",        trans_pose,   5.0, 1.0)
+        do_phase("TRANSPORT",        trans_pose,   6.5, 1.2)
         # Phase 7 – descend to place height
-        do_phase("PLACE descend",    place_closed, 2.0, 0.8)
+        do_phase("PLACE descend",    place_closed, 2.5, 1.0)
         # RELEASE the weld — object stays at target location
         deactivate_weld()
-        settle(model, data, viewer, 0.3)
+        settle(model, data, viewer, 0.6)
         # Phase 8 – open gripper
         do_phase("OPEN GRIPPER",     place_open,   0.8, 1.0)
         # Phase 9 – retreat home
@@ -494,6 +556,18 @@ def main():
         print(f"  XY error    : {err_2d*100:.1f} cm  (threshold 5 cm)")
         print(f"  Height OK   : {height_ok}")
         print("=" * 56)
+
+        # Final summary row + flush CSV
+        csv_writer.writerow([
+            'FINAL', f"{data.time:.4f}",
+            '', '', '',
+            f"{final_cube[0]:.4f}", f"{final_cube[1]:.4f}", f"{final_cube[2]:.4f}",
+            f"{target_pos[0]:.4f}", f"{target_pos[1]:.4f}", f"{target_pos[2]:.4f}",
+            int(data.eq_active[eq_id]),
+        ])
+        csv_file.flush()
+        csv_file.close()
+        print(f"  [LOG] saved → {LOG_CSV_PATH}")
 
         print("\n  Close the viewer window to exit.")
         while viewer.is_running():
