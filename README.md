@@ -119,6 +119,9 @@ See `Robothon/task1_pick_place/requirements.txt` for complete dependency list.
 - LeRobot framework compatibility
 - Docker containerization
 
+### Simulation Video and data logs
+-https://drive.google.com/drive/folders/1npnZ6ZBaHFwC0Qd1GR9LzzzFq7VFFNGb?usp=sharing
+
 ## 🔧 Configuration
 
 Key configuration files:
