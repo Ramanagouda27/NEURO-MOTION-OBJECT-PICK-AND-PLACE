@@ -359,14 +359,20 @@ def main():
     place_pos  = np.array([cyl_xyz[0],  cyl_xyz[1],  cyl_xyz[2]  + GRASP_H])
 
     # IK chain: each waypoint warm-started from the previous solution.
-    # Warm-start for HOVER is an explicit "upright elbow-up" reference so the
-    # arm doesn't collapse into a horizontal pose above the cube.
-    warm = np.array([0.00, -0.80,  1.30, -0.50,  0.00])   # shoulder lifted, elbow bent up
-    hover_q5,  e = solve_ik(model, site_id, arm_jnt_ids, arm_dof_ids, hover_pos,  warm)
+    # Warm-start for HOVER: compute shoulder_pan to point the arm AT the cube,
+    # then use a standard arm config (shoulder_lift up, elbow bent).
+    # This ensures the arm approaches the cube from a reachable initial pose.
+    pan_to_cube = float(np.arctan2(cube_xyz[1], cube_xyz[0]))
+    warm = np.array([pan_to_cube, -0.70,  1.20, -0.50,  0.00])
+    hover_q5,  e = solve_ik(model, site_id, arm_jnt_ids, arm_dof_ids, hover_pos,  warm,
+                             n_iter=1500)   # extra iterations for hover (critical grasp step)
     print(f"  hover      IK err = {e*1000:.2f} mm")
 
-    grasp_q5,  e = solve_ik(model, site_id, arm_jnt_ids, arm_dof_ids, grasp_pos,  hover_q5)
+    grasp_q5,  e = solve_ik(model, site_id, arm_jnt_ids, arm_dof_ids, grasp_pos,  hover_q5,
+                             n_iter=1500)   # critical: jaws must reach cube centre
     print(f"  grasp      IK err = {e*1000:.2f} mm")
+    if e > 0.05:   # >5cm IK error at grasp → jaws will miss the cube
+        print(f"  ⚠ WARNING: grasp IK error {e*1000:.1f}mm — jaws may not wrap cube!")
 
     lift_q5,   e = solve_ik(model, site_id, arm_jnt_ids, arm_dof_ids, lift_pos,   grasp_q5)
     print(f"  lift       IK err = {e*1000:.2f} mm")
