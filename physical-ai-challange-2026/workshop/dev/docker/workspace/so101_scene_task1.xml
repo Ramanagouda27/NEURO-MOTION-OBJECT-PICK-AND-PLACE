@@ -25,10 +25,15 @@
   </option>
 
   <visual>
-    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0.1 0.1 0.1"/>
+    <headlight diffuse="0.65 0.65 0.65" ambient="0.35 0.35 0.35" specular="0.15 0.15 0.15"/>
     <rgba haze="0.15 0.25 0.35 1"/>
-    <global azimuth="120" elevation="-20"/>
+    <!-- Free camera default: pulled back to frame full robot + table + target -->
+    <global azimuth="135" elevation="-22" offwidth="1920" offheight="1080"/>
+    <quality shadowsize="2048"/>
+    <map force="0.1" zfar="30"/>
   </visual>
+
+  <statistic center="0.05 0.10 0.55" extent="1.2"/>
 
   <asset>
     <!-- Procedural checkerboard textures for table + floor (no external files) -->

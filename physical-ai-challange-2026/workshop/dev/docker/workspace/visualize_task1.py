@@ -63,9 +63,13 @@ CAM_CX, CAM_CY = CAM_W / 2.0, CAM_H / 2.0
 #   HOVER_H   – ee_site target height above cube centre (approach phase)
 #   GRASP_H   – ee_site target height above cube centre (grip phase)
 #   LIFT_H    – ee_site target height above cube centre (carry phase)
-HOVER_H = 0.13
-GRASP_H = 0.025
-LIFT_H  = 0.22
+# EE-site target heights measured from the CUBE CENTRE (z = 0.432)
+#   HOVER_H : safe approach height above cube
+#   GRASP_H : jaws centred on cube (0 = EE at cube centre)
+#   LIFT_H  : carry height above cube centre during transport
+HOVER_H =  0.12
+GRASP_H =  0.00    # EE exactly at cube centre → jaws wrap around cube
+LIFT_H  =  0.18
 
 # ── Simulation timing ─────────────────────────────────────────────────────────
 CTRL_HZ = 50          # controller frequency (iterations/s)
@@ -354,8 +358,10 @@ def main():
     trans_pos  = np.array([cyl_xyz[0],  cyl_xyz[1],  cyl_xyz[2]  + LIFT_H])
     place_pos  = np.array([cyl_xyz[0],  cyl_xyz[1],  cyl_xyz[2]  + GRASP_H])
 
-    # IK chain: each waypoint warm-started from the previous solution
-    warm = HOME_Q6[:5].copy()
+    # IK chain: each waypoint warm-started from the previous solution.
+    # Warm-start for HOVER is an explicit "upright elbow-up" reference so the
+    # arm doesn't collapse into a horizontal pose above the cube.
+    warm = np.array([0.00, -0.80,  1.30, -0.50,  0.00])   # shoulder lifted, elbow bent up
     hover_q5,  e = solve_ik(model, site_id, arm_jnt_ids, arm_dof_ids, hover_pos,  warm)
     print(f"  hover      IK err = {e*1000:.2f} mm")
 
@@ -407,10 +413,12 @@ def main():
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         # Camera view: looking at the table from a comfortable angle
-        viewer.cam.azimuth   = 100.0
-        viewer.cam.elevation = -35.0
-        viewer.cam.distance  =  1.2
-        viewer.cam.lookat[:] = [0.1, 0.05, 0.50]
+        # Pulled back + slightly elevated so whole robot, table, cube and
+        # blue target are always in view across every phase.
+        viewer.cam.azimuth   = 135.0
+        viewer.cam.elevation = -25.0
+        viewer.cam.distance  =  1.8
+        viewer.cam.lookat[:] = [0.05, 0.10, 0.55]
         viewer.sync()
 
         # Let arm/cube settle in HOME pose before starting
@@ -458,50 +466,37 @@ def main():
 
         def activate_weld():
             """
-            Lock the cube to the gripper WITHOUT teleport / slingshot.
+            Lock the cube to the gripper at its CURRENT pose (no teleport).
 
-            Steps:
-              1. Snap cube position to the EE site (centred between jaws) and
-                 match its orientation to the gripper — so the weld's target
-                 offset equals the actual offset (zero violation at t=0).
-              2. Zero all 6 DoF of the free-joint so no residual momentum
-                 kicks the cube out.
-              3. Write the weld relpose using the CORRECT MuJoCo 3.x layout:
-                     eq_data[0:3]  = anchor        (body2 frame) → zero
-                     eq_data[3:6]  = relpose_pos   (body1 origin in body2)
-                     eq_data[6:10] = relpose_quat  (body1 orient in body2)
-                     eq_data[10]   = torquescale
-              4. Activate the equality constraint.
+            Writes the correct MuJoCo 3.x weld layout (11 slots):
+              eq_data[0:3]  = anchor        (body2 frame) → zero
+              eq_data[3:6]  = relpose_pos   (body1 origin in body2 frame)
+              eq_data[6:10] = relpose_quat  (body1 orient in body2 frame)
+              eq_data[10]   = torquescale
+
+            Also zeros the object's 6 free-joint DoFs to prevent any
+            residual velocity from slingshotting the cube at activation.
             """
             mujoco.mj_forward(model, data)
 
-            # (1) Snap cube into canonical grip pose (at EE site)
-            ee_sid   = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, 'ee_site')
-            ee_pos   = data.site_xpos[ee_sid].copy()
-            gri_quat = data.xquat[gripper_body_id].copy()
-            data.qpos[fj_adr    : fj_adr + 3] = ee_pos
-            data.qpos[fj_adr + 3: fj_adr + 7] = gri_quat
-
-            # (2) Zero free-joint velocities (lin + ang) to kill momentum
+            # Kill object momentum before locking
             obj_dofadr = int(model.jnt_dofadr[fj_id])
             data.qvel[obj_dofadr: obj_dofadr + 6] = 0.0
 
-            mujoco.mj_forward(model, data)
-
-            # (3) Compute body1(gripper)↔body2(object) relative pose
-            gri_mat  = data.xmat[gripper_body_id].reshape(3, 3)
+            # body1 = gripper_link, body2 = object
+            # relpose = body1 pose expressed in body2 frame
             gri_pos  = data.xpos[gripper_body_id].copy()
+            gri_quat = data.xquat[gripper_body_id].copy()
             obj_pos  = data.xpos[obj_body_id].copy()
             obj_quat = data.xquat[obj_body_id].copy()
-
-            # gripper pose expressed in object frame (body2 = object)
             obj_mat  = data.xmat[obj_body_id].reshape(3, 3)
+
             rel_pos  = obj_mat.T @ (gri_pos - obj_pos)
             rel_quat = qmul(qinv(obj_quat), gri_quat)
 
             model.eq_data[eq_id, 0:3]  = 0.0          # anchor at body2 origin
-            model.eq_data[eq_id, 3:6]  = rel_pos      # body1 pos in body2 frame
-            model.eq_data[eq_id, 6:10] = rel_quat     # body1 quat in body2 frame
+            model.eq_data[eq_id, 3:6]  = rel_pos      # body1 pos  in body2
+            model.eq_data[eq_id, 6:10] = rel_quat     # body1 quat in body2
             if model.eq_data.shape[1] > 10:
                 model.eq_data[eq_id, 10] = 1.0        # torquescale
 
