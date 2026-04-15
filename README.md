@@ -53,8 +53,8 @@ NEURO-MOTION-OBJECT-PICK-AND-PLACE/
 
 **Step 1: Clone the repository**
 ```bash
-git clone https://github.com/Ramanagouda27/NEURO-MOTION-OBJECT-PICK-AND-PLACE.git
-cd NEURO-MOTION-OBJECT-PICK-AND-PLACE/physical-ai-challange-2026/workshop/dev/docker/workspace
+git clone https://github.com/Ramanagouda27/NeuroMotion_PicknPlace.git
+cd NeuroMotion_PicknPlace/physical-ai-challange-2026/workshop/dev/docker/workspace
 ```
 
 **Step 2: Pull the instructor's Docker image**
